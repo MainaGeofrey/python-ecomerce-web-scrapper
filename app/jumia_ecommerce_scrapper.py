@@ -24,17 +24,18 @@ from selenium.common.exceptions import StaleElementReferenceException
 from json import JSONDecoder
 from fake_useragent import UserAgent
 from selenium.webdriver.chrome.service import Service
-import logging
+import logging as Log
 import logging.handlers
 import os
 import pandas as pd 
 import numpy as np
+import validators
  
-handler = logging.handlers.WatchedFileHandler(
+handler = Log.handlers.WatchedFileHandler(
     os.environ.get("LOGFILE", "../logs/scrap.log"))
-formatter = logging.Formatter(logging.BASIC_FORMAT)
+formatter = Log.Formatter(Log.BASIC_FORMAT)
 handler.setFormatter(formatter)
-root = logging.getLogger()
+root = Log.getLogger()
   #The application will now log all messages with level INFO or above to file
 root.setLevel(os.environ.get("LOGLEVEL", "INFO"))
 root.addHandler(handler)
@@ -42,7 +43,7 @@ root.addHandler(handler)
 
 def driver_setup():
     try:
-        logging.info(datetime.now())
+        Log.info(datetime.now())
         contact_info = "jeffdevops6@gmail."
         user_agent = "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:94.0) Gecko/20100101 Firefox/94.0"+ contact_info
         
@@ -63,42 +64,138 @@ def driver_setup():
         s=Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=s, options=chrome_options)
     except Exception as e:
-        logging.error("logOpeningBrowserFail:",e)
-        logging.info(datetime.now())
+        Log.error("logOpeningBrowserFail:",e)
+        Log.info(datetime.now())
     else:
-        logging.info("logOpenBrowserSuccess")
+        Log.info("logOpenBrowserSuccess")
         return driver
 
 driver = driver_setup()
-driver.get('https://www.jumia.co.ke/catalog/?q=samsung+galaxy&page=6#catalog-listing')
-print(driver.title)
 
-wait = WebDriverWait(driver, 10)
 
-try:
-    pop_up = wait.until(EC.presence_of_element_located((By.ID, "pop")))
-    exit_button = pop_up.find_element(By.CLASS_NAME,"cls").click()
-    
-    ##content_section = wait.until(EC.presence_of_element_located((By.CLASS_NAME, "-paxs")))
-    content_div = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR,"section.card.-fh")))
-    #header = content_div.find_element(By.TAG_NAME,"header")
-    header = content_div.find_element(By.CSS_SELECTOR,"p.-gy5.-phs").text
-    items_total = int("".join(filter(str.isdigit, header)))
-    
-    catalogue = content_div.find_element(By.CSS_SELECTOR,"div.-paxs.row._no-g._4cl-3cm-shs")
-    articles  = catalogue.find_elements(By.TAG_NAME, "article")
-    ##article  = catalogue.find_element(By.TAG_NAME, "article").click()
-    
+def scroll_down_page(speed=20):
+    print("scroll down page")
+    current_scroll_position, new_height= 0, 1
+    while current_scroll_position <= new_height:
+        current_scroll_position += speed
+        driver.execute_script("window.scrollTo(0, {});".format(current_scroll_position))
+        new_height = driver.execute_script("return document.body.scrollHeight")
 
-    for article in articles:
-        a = article.find_element(By.TAG_NAME, "a")
-        article_url = a.get_attribute('href')
-        #article_image = a.find_element(By.CSS_SELECTOR, "div.img-c").get
-       # article_info = a.find_element(By.CSS_SELECTOR, "div.info")
-        #name = article_info.find_element(By.CSS_SELECTOR, "h3.name").text
-        print(article_url)
+def save_product(products, count, file):
+    data = []
+    for product in products:
+        details = product.find_element(By.TAG_NAME, "a")
+        if details:
+            url = details.get_attribute('href')
+            #image_div = a.find_element(By.CSS_SELECTOR, "div.img-c")
+            #image = image_div.find_element(By.TAG_NAME, "img").get_attribute('src')
+            #image = details.find_element(By.XPATH,"//img[contains(@class,'img')]").get_attribute('src')
+            image = details.find_element(By.CSS_SELECTOR,"img").get_attribute("src")
+            name = details.find_element(By.CSS_SELECTOR,"h3").get_attribute("innerText")
+            new_price = details.find_element(By.CSS_SELECTOR,"div.prc").get_attribute("innerText")
+            ##old_price = details.find_element(By.CSS_SELECTOR,"div.old").get_attribute("innerText")
+            
+            data_list = np.array([name, image,url, new_price])
+            data.append(data_list) 
+        else:
+            raise Exception("Product details not found")
 
-  
-except:
-    print('non')
-    pass
+    save_data(np.array(data), count, file)
+      
+
+def get_url(search_query, page_number ):
+    base_url = "https://www.jumia.co.ke/catalog/"
+    params = {"q": search_query, "page": str(page_number)}
+    fragment = "catalog-listing"
+
+    url_parts = list(urllib.parse.urlparse(base_url))
+    url_parts[4] = urllib.parse.urlencode(params)
+    url_parts[5] = fragment
+
+    url = urllib.parse.urlunparse(url_parts)
+
+    #url = 'https://www.jumia.co.ke/catalog/?q=samsung+galaxy&page={}#catalog-listing'.format(page)
+    return url
+ 
+
+def make_file():
+    now = datetime.now()
+    d1 = now.strftime("%Y%m%d%H%M%S")
+    name = f'../bulk/recipients_{d1}.csv'
+    csv_file = open(name, 'w', encoding='utf-8') 
+    #writer = csv.writer(csv_file)
+    return name
+   
+
+def save_data(data, count, file):
+    if count == 1:
+        columns = ['Name', 'Image', 'Url', 'Price']
+        df = pd.DataFrame(data, columns=columns)
+        df.to_csv(file, mode='a', encoding='utf-8', index=False)
+        count += 1
+    if count == 2:
+        #print("count = %d" % count)
+        df = pd.DataFrame(data)
+        df.to_csv(file, mode='a', encoding='utf-8', index=False, header=False)
+
+
+def get_data(driver, file, search_query):
+    try:
+        page = 1
+        count = 1
+        nav = get_url(search_query,page)
+        #print(driver.title)
+        wait = WebDriverWait(driver, 10)
+        
+        while validators.url(nav):
+            driver.get(nav)       
+            if page == 1:
+                pop_up = wait.until(EC.presence_of_element_located((By.ID, "pop")))
+                pop_up.find_element(By.CLASS_NAME,"cls").click()
+                
+                page += 1
+            
+            #scroll for images loading
+            scroll_down_page()
+            
+            ##content_section = wait.until(EC.presence_of_element_located((By.CLASS_NAME, "-paxs")))
+            section = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR,"section.card.-fh")))
+            #header = section.find_element(By.TAG_NAME,"header")
+            #header = section.find_element(By.CSS_SELECTOR,"p.-gy5.-phs").text
+            #products_total = int("".join(filter(str.isdigit, header)))
+                
+
+            #catalogue = section.find_element(By.CSS_SELECTOR,"div.-paxs.row._no-g._4cl-3cm-shs")
+            #articles  = catalogue.find_elements(By.TAG_NAME, "article")
+            articles = section.find_elements(By.XPATH, "//div[contains(@class,'-paxs row _no-g _4cl-3cm-shs')]//article[contains(@class,'prd _fb col c-prd')]")
+            print(len(articles))
+            save_product(articles, count, file)
+            
+            if count == 1:
+                count = 2
+            nav = section.find_element(By.XPATH, "//div[contains(@class,'pg-w -ptm -pbxl')]//a[contains(@aria-label,'Next Page')]").get_attribute('href')
+            
+
+
+        """ save_product(articles)
+        page = 2
+        while products_total > 0:
+            driver.get(get_url(page))
+            scroll_down_page()
+                    
+            section = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR,"section.card.-fh")))
+            catalogue = section.find_element(By.CSS_SELECTOR,"div.-paxs.row._no-g._4cl-3cm-shs")
+            articles  = catalogue.find_elements(By.TAG_NAME, "article")
+            save_product(articles)
+            products_total -= len(articles)
+            page += 1
+            print(page)
+            """
+
+    except:
+        print('non')
+        pass
+
+file = make_file()
+search_query = "Samsung Galaxy"
+get_data(driver,file, search_query)

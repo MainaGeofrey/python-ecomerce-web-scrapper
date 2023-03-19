@@ -1,3 +1,5 @@
 .env
 bulk/*
 logs/*
+env
+scrapper.py
