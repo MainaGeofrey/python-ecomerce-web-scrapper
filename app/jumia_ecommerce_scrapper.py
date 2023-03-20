@@ -44,7 +44,9 @@ root.addHandler(handler)
 def driver_setup():
     try:
         Log.info(datetime.now())
-        contact_info = "jeffdevops6@gmail."
+        load_dotenv() 
+        EMAIL = os.environ.get('EMAIL')
+        contact_info = EMAIL
         user_agent = "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:94.0) Gecko/20100101 Firefox/94.0"+ contact_info
         
         #remove certain stuff for performance
@@ -121,7 +123,7 @@ def get_url(search_query, page_number ):
 def make_file():
     now = datetime.now()
     d1 = now.strftime("%Y%m%d%H%M%S")
-    name = f'../bulk/recipients_{d1}.csv'
+    name = f'../bulk/jumia_{d1}.csv'
     csv_file = open(name, 'w', encoding='utf-8') 
     #writer = csv.writer(csv_file)
     return name
