@@ -5,14 +5,12 @@ import requests
 import json
 from bs4 import BeautifulSoup 
 import pandas as pd
-import os
 import csv
 import time
 import sys
 import urllib.request
 from datetime import date, datetime
 from htmldate import find_date
-from dotenv import load_dotenv
 from selenium import webdriver
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.options import Options
@@ -24,28 +22,29 @@ from selenium.common.exceptions import StaleElementReferenceException
 from json import JSONDecoder
 from fake_useragent import UserAgent
 from selenium.webdriver.chrome.service import Service
-import logging as Log
-import logging.handlers
+import logging.config 
+#import logging.handlers
 import os
+from dotenv import load_dotenv
 import pandas as pd 
 import numpy as np
 import validators
- 
-handler = Log.handlers.WatchedFileHandler(
-    os.environ.get("LOGFILE", "../logs/scrap.log"))
-formatter = Log.Formatter(Log.BASIC_FORMAT)
-handler.setFormatter(formatter)
-root = Log.getLogger()
-  #The application will now log all messages with level INFO or above to file
-root.setLevel(os.environ.get("LOGLEVEL", "INFO"))
-root.addHandler(handler)
+
+
+sys.path.append('config')
+
+from config.logger import LOGGING_CONFIG
+logging.config.dictConfig(LOGGING_CONFIG)
+Log = logging.getLogger(__name__)
+
+
 
 
 def driver_setup():
     try:
         Log.info(datetime.now())
         load_dotenv() 
-        EMAIL = os.environ.get('EMAIL')
+        EMAIL = os.environ.get('CONTACT_EMAIL')
         contact_info = EMAIL
         user_agent = "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:94.0) Gecko/20100101 Firefox/94.0"+ contact_info
         
